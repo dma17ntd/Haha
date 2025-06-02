@@ -1,9 +1,8 @@
-import os, base64, rsa, sys, time, re
+import os, base64, rsa, sys, time, subprocess, re
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256, HMAC
-import marshal, zlib, bz2, lzma, binascii, time
 
 # === RSA Key Generation ===
 def create_rsa_keys():
@@ -27,39 +26,12 @@ def add_custom_comment(filename, custom_header):
     try:
         with open(filename, "r", encoding="utf-8") as f:
             content = f.read()
-        # Xóa các dòng pyminifier cũ nếu có
-        pattern = r"#\s*Created by pyminifier\s*\(https://github\.com/liftoff/pyminifier\)\n?"
-        content = re.sub(pattern, "", content)
         content = custom_header.strip() + '\n' + content
         with open(filename, "w", encoding="utf-8") as f:
             f.write(content)
         print(f"[✓] Đã thêm comment bản quyền vào {filename}")
     except Exception as e:
         print(f"[!] Lỗi thêm comment: {e}")
-
-# === Các lớp mã hóa đa tầng ===
-def multilayer_encode(source_code: str) -> str:
-    # Lần lượt encode: marshal -> zlib -> bz2 -> lzma -> base85 -> hex -> base64
-    marshaled = marshal.dumps(compile(source_code, '<string>', 'exec'))
-    compressed_zlib = zlib.compress(marshaled)
-    compressed_bz2 = bz2.compress(compressed_zlib)
-    compressed_lzma = lzma.compress(compressed_bz2)
-    base85_encoded = base64.a85encode(compressed_lzma)
-    hex_encoded = binascii.hexlify(base85_encoded)
-    base64_encoded = base64.b64encode(hex_encoded)
-    return base64_encoded.decode()
-
-def multilayer_decode():
-    import base64, binascii, marshal, zlib, bz2, lzma
-    # Hàm giải mã tương ứng với multilayer_encode
-    b64 = "<ENCODED_PAYLOAD>"
-    hexed = base64.b64decode(b64)
-    base85d = binascii.unhexlify(hexed)
-    lzmad = base64.a85decode(base85d)
-    bz2d = lzma.decompress(lzmad)
-    zlibd = bz2.decompress(bz2d)
-    codeobj = marshal.loads(zlib.decompress(zlibd))
-    exec(codeobj)
 
 # === Encryption Process ===
 def encrypt_file(input_file, output_file):
@@ -92,8 +64,9 @@ def encrypt_file(input_file, output_file):
     signature = rsa.sign(plaintext.encode(), privkey, 'SHA-256')
     signature_b64 = base64.b64encode(signature).decode()
 
-    # Phần mã nguồn giải mã + kiểm tra + chạy code gốc (được nhúng vào đa lớp encode)
-    decrypt_and_exec_code = f'''
+    temp_out = f"__temp_{output_file}"
+    with open(temp_out, 'w', encoding='utf-8') as f:
+        f.write(f'''\
 import base64, rsa, sys, os, hashlib, time
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
@@ -105,6 +78,21 @@ def manhs_debug():
         sys.settrace(lambda *a, **k: None)
         if sys.gettrace():
             return True
+    except:
+        pass
+    try:
+        import ctypes
+        if hasattr(ctypes, "windll") and ctypes.windll.kernel32.IsDebuggerPresent() != 0:
+            return True
+    except:
+        pass
+    try:
+        import psutil
+        sus = ['gdb', 'frida', 'ollydbg', 'x64dbg', 'ida', 'wireshark']
+        for proc in psutil.process_iter(['name']):
+            pname = (proc.info['name'] or '').lower()
+            if any(s in pname for s in sus):
+                return True
     except:
         pass
     return False
@@ -127,7 +115,7 @@ def check_integrity():
     try:
         with open(__file__, 'rb') as f:
             content = f.read()
-        expected_hash = "{hashlib.sha256(b'placeholder').hexdigest()}"
+        expected_hash = "SHA256_HASH_PLACEHOLDER"
         actual_hash = hashlib.sha256(content).hexdigest()
         if actual_hash != expected_hash:
             manhs_glitch()
@@ -178,30 +166,35 @@ if not verify_sig(plaintext, "{signature_b64}"):
     manhs_glitch()
 
 exec(plaintext)
-'''
+''')
 
-    # Encode đa lớp đoạn decrypt_and_exec_code
-    encoded_payload = multilayer_encode(decrypt_and_exec_code)
+    with open(temp_out, 'rb') as f:
+        content = f.read()
+    sha256 = hashlib.sha256(content).hexdigest()
 
-    # Tạo file đầu ra với 1 dòng exec duy nhất và comment bản quyền
-    final_code = f'''\
+    with open(temp_out, 'r+', encoding='utf-8') as f:
+        code = f.read()
+        code = code.replace("SHA256_HASH_PLACEHOLDER", sha256)
+        f.seek(0)
+        f.write(code)
+        f.truncate()
+
+    # Lưu file đầu ra (không obfuscate bằng pyminifier nữa)
+    os.rename(temp_out, output_file)
+
+    # Ghi bản quyền
+    custom_header = """
 # Copyright By MinhAnhs
 # Đã mã hóa và bảo vệ quyền tác giả
 # Chống decode và chỉnh sửa
+"""
+    add_custom_comment(output_file, custom_header)
 
-import base64, marshal, zlib, bz2, lzma, binascii
-
-exec(marshal.loads(zlib.decompress(bz2.decompress(lzma.decompress(base64.a85decode(binascii.unhexlify(base64.b64decode("{encoded_payload}"))))))))
-'''
-
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(final_code)
-
-    print(f"[✓] File đã được mã hóa, lưu tại: {output_file}")
+    print(f"[✓] File đã được mã hóa và lưu tại: {output_file}")
 
 # === Main ===
 def main():
-    print("=== AES-GCM Encryptor + Anti-Debug + RSA + Multilayer Encode ===")
+    print("=== AES-GCM Encryptor + Anti-Debug + RSA ===")
     create_rsa_keys()
 
     input_file = input("Nhập tên file đầu vào (vd: file.py): ").strip()
