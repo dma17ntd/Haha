@@ -1,243 +1,188 @@
-import os, sys, base64, re, subprocess, time
-import rsa
+import os, base64, rsa, sys, time, subprocess, re
 from Crypto.Cipher import AES
-from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Random import get_random_bytes
-import platform
-import uuid
+from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Hash import SHA256, HMAC
 
-# Màu sắc
-do = "\033[1;38;5;9m"
-vang = "\033[1;38;5;226m"
-trang = "\033[1;38;5;255m"
-xla = "\033[1;32m"
+# === RSA Key Generation ===
+def create_rsa_keys():
+    if not (os.path.exists("private.pem") and os.path.exists("public.pem")):
+        print("[*] Đang tạo khóa RSA...")
+        pubkey, privkey = rsa.newkeys(2048)
+        with open("private.pem", "wb") as f:
+            f.write(privkey.save_pkcs1('PEM'))
+        with open("public.pem", "wb") as f:
+            f.write(pubkey.save_pkcs1('PEM'))
+        print("[✓] Tạo khóa RSA thành công.")
+    else:
+        print("[!] Khóa RSA đã tồn tại.")
 
-success = xla + "[" + vang + "✓" + xla + "]"
-error = do + "[" + vang + "!" + do + "]"
-waring = do + "(" + vang + "!" + do + ")"
+# === PBKDF2 Key Derivation ===
+def derive_key(password: bytes, salt: bytes, key_len=32) -> bytes:
+    return PBKDF2(password, salt, dkLen=key_len, count=100_000, hmac_hash_module=SHA256)
 
-ma_ = os.getcwd()
-os.system('clear')
+# === Comment thêm bản quyền sau khi obfuscate ===
+def add_custom_comment(filename, custom_header):
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            content = f.read()
+        pattern = r"#\s*Created by pyminifier\s*\(https://github\.com/liftoff/pyminifier\)\n?"
+        content = re.sub(pattern, "", content)
+        content = custom_header.strip() + '\n' + content
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"[✓] Đã thêm comment bản quyền vào {filename}")
+    except Exception as e:
+        print(f"[!] Lỗi thêm comment: {e}")
 
-def manhs_rsa_key():
-    if not (os.path.exists("private.pem") and os.path.exists("public.pem")):
-        print(f"{waring} Đang tạo khóa...")
-        (pubkey, privkey) = rsa.newkeys(2048)
-        with open("private.pem", "wb") as f:
-            f.write(privkey.save_pkcs1('PEM'))
-        with open("public.pem", "wb") as f:
-            f.write(pubkey.save_pkcs1('PEM'))
-        print(f"{success} Đã tạo khóa xong")
-    else:
-        print(f"{waring} Đang dùng khóa hiện có")
+# === Encryption Process ===
+def encrypt_file(input_file, output_file):
+    import hashlib
 
-def manhs_comment(filename, tdung_manhs):
-    try:
-        with open(filename, "r", encoding="utf-8") as f:
-            content = f.read()
-        pattern = r"#\s*Created by pyminifier\s*\(https://github\.com/liftoff/pyminifier\)\n?"
-        content = re.sub(pattern, "", content)
-        content = tdung_manhs.strip() + '\n' + content
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"\n{success} Đã obfuscate {filename}")
-    except Exception as e:
-        print(f"\n{error} Lỗi obfuscate: {e}")
-
-def is_sandbox_or_vm():
-    try:
-        system = platform.system().lower()
-        if system == "windows":
-            import subprocess
-            try:
-                output = subprocess.check_output('reg query "HKEY_LOCAL_MACHINE\\SYSTEM\\ControlSet001\\Services\\VBoxGuest"', shell=True, stderr=subprocess.DEVNULL)
-                if b"VBoxGuest" in output:
-                    return True
-            except:
-                pass
-            try:
-                output = subprocess.check_output('reg query "HKEY_LOCAL_MACHINE\\SYSTEM\\ControlSet001\\Services\\vmtools"', shell=True, stderr=subprocess.DEVNULL)
-                if b"vmtools" in output:
-                    return True
-            except:
-                pass
-            suspicious_drivers = ['vbox', 'vmware', 'qemu']
-            drivers = subprocess.check_output("driverquery", shell=True).decode().lower()
-            if any(d in drivers for d in suspicious_drivers):
-                return True
-        else:
-            vm_files = [
-                '/sys/class/dmi/id/product_name',
-                '/sys/class/dmi/id/sys_vendor',
-                '/proc/scsi/scsi'
-            ]
-            for f in vm_files:
-                if os.path.exists(f):
-                    with open(f, 'r') as file:
-                        content = file.read().lower()
-                        if any(x in content for x in ['vmware', 'virtualbox', 'qemu', 'kvm']):
-                            return True
-            import re
-            mac = ':'.join(re.findall('..', '%012x' % uuid.getnode()))
-            vm_mac_prefixes = ['00:05:69', '00:0c:29', '00:1c:14', '00:50:56', '08:00:27']
-            if any(mac.lower().startswith(prefix) for prefix in vm_mac_prefixes):
-                return True
-        return False
-    except:
-        return False
-
-def manhs_encrypted(input_file, output_file):
     with open(input_file, 'r', encoding='utf-8') as f:
-        code = f.read()
+        plaintext = f.read()
 
-    # Sinh key AES random 32 bytes, salt, iv
-    aes_key = get_random_bytes(32)
+    raw_key = get_random_bytes(32)
     salt = get_random_bytes(16)
-    iv = get_random_bytes(16)
+    derived_key = derive_key(raw_key, salt)
 
-    # Derive key từ aes_key với PBKDF2
-    key = PBKDF2(aes_key, salt, dkLen=32, count=100_000)
+    cipher = AES.new(derived_key, AES.MODE_GCM)
+    ciphertext, tag = cipher.encrypt_and_digest(plaintext.encode())
+    nonce = cipher.nonce
 
-    cipher = AES.new(key, AES.MODE_OFB, iv)
-    ciphertext = cipher.encrypt(code.encode())
+    salt_masked = ''.join(chr(c ^ salt[i % len(salt)]) for i, c in enumerate(raw_key)).encode('latin1')
+    encrypted_key_b64 = base64.b64encode(salt_masked).decode()
+    salt_b64 = base64.b64encode(salt).decode()
+    nonce_b64 = base64.b64encode(nonce).decode()
+    tag_b64 = base64.b64encode(tag).decode()
+    ciphertext_b64 = base64.b64encode(ciphertext).decode()
 
-    # Mã hóa AES key bằng RSA public key
-    with open("public.pem", "rb") as f:
-        pubkey = rsa.PublicKey.load_pkcs1(f.read())
-    encrypted_aes_key = rsa.encrypt(aes_key, pubkey)
+    hmac_data = salt + nonce + tag + ciphertext
+    hmac_calculated = HMAC.new(derived_key, hmac_data, digestmod=SHA256).digest()
+    hmac_b64 = base64.b64encode(hmac_calculated).decode()
 
-    # Tạo chữ ký bằng private key
     with open("private.pem", "rb") as f:
         privkey = rsa.PrivateKey.load_pkcs1(f.read())
-    signature = rsa.sign(code.encode(), privkey, 'SHA-256')
+    signature = rsa.sign(plaintext.encode(), privkey, 'SHA-256')
+    signature_b64 = base64.b64encode(signature).decode()
 
-    b64 = lambda x: base64.b64encode(x).decode()
-    salt_b64 = b64(salt)
-    iv_b64 = b64(iv)
-    data_b64 = b64(ciphertext)
-    signature_b64 = b64(signature)
-    encrypted_key_b64 = b64(encrypted_aes_key)
-
-    junido_kai = f"__temp_{output_file}"
-
-    with open(junido_kai, 'w', encoding='utf-8') as f:
-        f.write(f'''
-import os, sys, time, base64, rsa, platform, uuid, re
+    temp_out = f"__temp_{output_file}"
+    with open(temp_out, 'w', encoding='utf-8') as f:
+        f.write(f'''\
+import base64, rsa, sys, os, hashlib, time
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
+from Crypto.Hash import SHA256, HMAC
 
-def is_sandbox_or_vm():
+def manhs_debug():
     try:
-        system = platform.system().lower()
-        if system == "windows":
-            import subprocess
-            try:
-                output = subprocess.check_output('reg query "HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\ControlSet001\\\\Services\\\\VBoxGuest"', shell=True, stderr=subprocess.DEVNULL)
-                if b"VBoxGuest" in output:
-                    return True
-            except:
-                pass
-            try:
-                output = subprocess.check_output('reg query "HKEY_LOCAL_MACHINE\\\\SYSTEM\\\\ControlSet001\\\\Services\\\\vmtools"', shell=True, stderr=subprocess.DEVNULL)
-                if b"vmtools" in output:
-                    return True
-            except:
-                pass
-            suspicious_drivers = ['vbox', 'vmware', 'qemu']
-            drivers = subprocess.check_output("driverquery", shell=True).decode().lower()
-            if any(d in drivers for d in suspicious_drivers):
-                return True
-        else:
-            vm_files = [
-                '/sys/class/dmi/id/product_name',
-                '/sys/class/dmi/id/sys_vendor',
-                '/proc/scsi/scsi'
-            ]
-            for f in vm_files:
-                if os.path.exists(f):
-                    with open(f, 'r') as file:
-                        content = file.read().lower()
-                        if any(x in content for x in ['vmware', 'virtualbox', 'qemu', 'kvm']):
-                            return True
-            mac = ':'.join(re.findall('..', '%012x' % uuid.getnode()))
-            vm_mac_prefixes = ['00:05:69', '00:0c:29', '00:1c:14', '00:50:56', '08:00:27']
-            if any(mac.lower().startswith(prefix) for prefix in vm_mac_prefixes):
-                return True
-        return False
-    except:
-        return False
-
-def detect_debug():
-    try:
-        import ctypes, psutil, subprocess
-        if hasattr(ctypes, "windll") and ctypes.windll.kernel32.IsDebuggerPresent():
-            return True
+        import sys
+        sys.settrace(lambda *a, **k: None)
         if sys.gettrace():
             return True
-        suspects = ['frida', 'gdb', 'x64dbg', 'ollydbg', 'ida', 'wireshark']
-        for p in psutil.process_iter(['name']):
-            name = p.info['name'] or ''
-            if any(s in name.lower() for s in suspects):
+    except:
+        pass
+    try:
+        import ctypes
+        if hasattr(ctypes, "windll") and ctypes.windll.kernel32.IsDebuggerPresent() != 0:
+            return True
+    except:
+        pass
+    try:
+        import psutil
+        sus = ['gdb', 'frida', 'ollydbg', 'x64dbg', 'ida', 'wireshark']
+        for proc in psutil.process_iter(['name']):
+            pname = (proc.info['name'] or '').lower()
+            if any(s in pname for s in sus):
                 return True
     except:
         pass
-    if is_sandbox_or_vm():
-        return True
+    return False
+
+def manhs_anti():
     t1 = time.perf_counter()
     time.sleep(0.05)
     t2 = time.perf_counter()
-    if (t2 - t1) > 0.2:
-        return True
-    return False
+    return (t2 - t1) > 0.2
 
 def manhs_glitch():
     try:
-        with open(__file__, 'w', encoding='utf-8') as f:
-            f.write("#Copyright : Manhs\\n")
-            f.write("#Code bị phá hủy do phát hiện sửa đổi hoặc debug!\\n")
-            f.write("#Bản gốc không còn sử dụng được nữa.\\n")
-            f.write("#Do phát hiện có hành vi decode lên file hỏng.\\n")
+        with open(__file__, 'w') as f:
+            f.write("#Code bị phá hủy do debug hoặc sửa mã!")
     except:
         pass
     sys.exit(1)
 
-def verify_signature(code, signature_b64):
+def check_integrity():
     try:
-        with open("public.pem", "rb") as f:
-            pubkey = rsa.PublicKey.load_pkcs1(f.read())
-        signature = base64.b64decode(signature_b64)
-        rsa.verify(code.encode(), signature, pubkey)
+        with open(__file__, 'rb') as f:
+            content = f.read()
+        expected_hash = "SHA256_HASH_PLACEHOLDER"
+        actual_hash = hashlib.sha256(content).hexdigest()
+        if actual_hash != expected_hash:
+            manhs_glitch()
+    except:
+        manhs_glitch()
+
+def xor_decrypt(b64_key, salt):
+    enc = base64.b64decode(b64_key).decode('latin1')
+    salt = base64.b64decode(salt)
+    return bytes(ord(c) ^ salt[i % len(salt)] for i, c in enumerate(enc))
+
+def verify_sig(data, sig_b64):
+    with open("public.pem", "rb") as f:
+        pubkey = rsa.PublicKey.load_pkcs1(f.read())
+    try:
+        rsa.verify(data.encode(), base64.b64decode(sig_b64), pubkey)
         return True
     except:
         return False
 
-if detect_debug():
+if manhs_debug() or manhs_anti():
     manhs_glitch()
 
+check_integrity()
+
+key = xor_decrypt("{encrypted_key_b64}", "{salt_b64}")
+salt = base64.b64decode("{salt_b64}")
+derived_key = PBKDF2(key, salt, dkLen=32, count=100000, hmac_hash_module=SHA256)
+
+nonce = base64.b64decode("{nonce_b64}")
+tag = base64.b64decode("{tag_b64}")
+ciphertext = base64.b64decode("{ciphertext_b64}")
+hmac_received = base64.b64decode("{hmac_b64}")
+
+hmac_data = salt + nonce + tag + ciphertext
 try:
-    encrypted_key = base64.b64decode("{encrypted_key_b64}")
-
-    with open("private.pem", "rb") as f:
-        privkey = rsa.PrivateKey.load_pkcs1(f.read())
-
-    aes_key = rsa.decrypt(encrypted_key, privkey)
-
-    salt = base64.b64decode("{salt_b64}")
-    iv = base64.b64decode("{iv_b64}")
-    ciphertext = base64.b64decode("{data_b64}")
-
-    key = PBKDF2(aes_key, salt, dkLen=32, count=100_000)
-    cipher = AES.new(key, AES.MODE_OFB, iv)
-    plaintext = cipher.decrypt(ciphertext).decode()
+    HMAC.new(derived_key, hmac_data, digestmod=SHA256).verify(hmac_received)
 except:
     manhs_glitch()
 
-if not verify_signature(plaintext, "{signature_b64}"):
+cipher = AES.new(derived_key, AES.MODE_GCM, nonce=nonce)
+try:
+    plaintext = cipher.decrypt_and_verify(ciphertext, tag).decode()
+except:
+    manhs_glitch()
+
+if not verify_sig(plaintext, "{signature_b64}"):
     manhs_glitch()
 
 exec(plaintext)
 ''')
 
+    # 🛡️ Tính checksum SHA256 sau khi ghi file
+    with open(temp_out, 'rb') as f:
+        content = f.read()
+    sha256 = hashlib.sha256(content).hexdigest()
+
+    with open(temp_out, 'r+', encoding='utf-8') as f:
+        code = f.read()
+        code = code.replace("SHA256_HASH_PLACEHOLDER", sha256)
+        f.seek(0)
+        f.write(code)
+        f.truncate()
+
+    # Obfuscate
     subprocess.run([
         "pyminifier",
         "--obfuscate",
@@ -245,33 +190,35 @@ exec(plaintext)
         "--bzip2",
         "--lzma",
         "--gzip",
-        junido_kai
+        temp_out
     ], stdout=open(output_file, 'w', encoding='utf-8'))
 
-    os.remove(junido_kai)
+    os.remove(temp_out)
 
-    manhs_custom = """
-#Copyright By MinhAnhs
-#WhiteNN & JunidoKai
-#Bảo vệ quyền tác giả
-#Chống hành vi Decode
+    # Ghi bản quyền
+    custom_header = """
+# Copyright By MinhAnhs
+# Đã mã hóa và bảo vệ quyền tác giả
+# Chống decode và chỉnh sửa
 """
-    manhs_comment(output_file, manhs_custom)
+    add_custom_comment(output_file, custom_header)
 
-    print(f"{success} Đã tạo file mã hóa: {output_file}\n\nLưu file tại{trang}: {xla}{ma_}")
+    print(f"[✓] File đã được mã hóa, obfuscate và lưu tại: {output_file}")
 
+
+# === Main ===
 def main():
-    print(f"{xla}=== AES-PBKDF2 + RSA-SHA256 Encryptor ==={trang}")
-    manhs_rsa_key()
+    print("=== AES-GCM Encryptor + Anti-Debug + RSA + Pyminifier ===")
+    create_rsa_keys()
 
-    manhs_file = input(f"{xla}Nhập tên file đầu vào (vdu: file.py) gốc: ").strip()
-    manhs_out = input("Nhập tên file đầu ra (vdu: file_out.py): ").strip()
+    input_file = input("Nhập tên file đầu vào (vd: file.py): ").strip()
+    output_file = input("Nhập tên file đầu ra (vd: file_out.py): ").strip()
 
-    if not os.path.exists(manhs_file):
-        print(f"{error} File không tồn tại.")
-        return
+    if not os.path.exists(input_file):
+        print("[!] File không tồn tại.")
+        return
 
-    manhs_encrypted(manhs_file, manhs_out)
+    encrypt_file(input_file, output_file)
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    main()
