@@ -1,8 +1,9 @@
-import os, base64, rsa, sys, time, subprocess, re, textwrap
+import os, base64, rsa, sys, time, re
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256, HMAC
+import hashlib
 
 # === RSA Key Generation ===
 def create_rsa_keys():
@@ -21,7 +22,7 @@ def create_rsa_keys():
 def derive_key(password: bytes, salt: bytes, key_len=32) -> bytes:
     return PBKDF2(password, salt, dkLen=key_len, count=100_000, hmac_hash_module=SHA256)
 
-# === Comment thêm bản quyền sau khi obfuscate ===
+# === Comment thêm bản quyền ===
 def add_custom_comment(filename, custom_header):
     try:
         with open(filename, "r", encoding="utf-8") as f:
@@ -37,8 +38,6 @@ def add_custom_comment(filename, custom_header):
 
 # === Encryption Process ===
 def encrypt_file(input_file, output_file):
-    import hashlib
-
     with open(input_file, 'r', encoding='utf-8') as f:
         plaintext = f.read()
 
@@ -67,8 +66,8 @@ def encrypt_file(input_file, output_file):
     signature_b64 = base64.b64encode(signature).decode()
 
     temp_out = f"__temp_{output_file}"
-
-    code_template = f'''\
+    with open(temp_out, 'w', encoding='utf-8') as f:
+        f.write(f'''\
 import base64, rsa, sys, os, hashlib, time
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
@@ -120,9 +119,10 @@ def check_integrity():
         expected_hash = "SHA256_HASH_PLACEHOLDER"
         actual_hash = hashlib.sha256(content).hexdigest()
         if actual_hash != expected_hash:
-            manhs_glitch()
+            return False
+        return True
     except:
-        manhs_glitch()
+        return False
 
 def xor_decrypt(b64_key, salt):
     enc = base64.b64decode(b64_key).decode('latin1')
@@ -138,10 +138,9 @@ def verify_sig(data, sig_b64):
     except:
         return False
 
-if manhs_debug() or manhs_anti():
+# Chỉ gọi manhs_glitch khi có lỗi hoặc bị debug
+if manhs_debug() or manhs_anti() or not check_integrity():
     manhs_glitch()
-
-check_integrity()
 
 key = xor_decrypt("{encrypted_key_b64}", "{salt_b64}")
 salt = base64.b64decode("{salt_b64}")
@@ -168,12 +167,9 @@ if not verify_sig(plaintext, "{signature_b64}"):
     manhs_glitch()
 
 exec(plaintext)
-'''
+''')
 
-    with open(temp_out, 'w', encoding='utf-8') as f:
-        f.write(textwrap.dedent(code_template))
-
-    # 🛡️ Tính checksum SHA256 sau khi ghi file
+    # Tính checksum SHA256 sau khi ghi file
     with open(temp_out, 'rb') as f:
         content = f.read()
     sha256 = hashlib.sha256(content).hexdigest()
@@ -185,16 +181,9 @@ exec(plaintext)
         f.write(code)
         f.truncate()
 
-    # Obfuscate
-    subprocess.run([
-        "pyminifier",
-        "--obfuscate",
-        "--replacement-length=6",
-        "--bzip2",
-        "--lzma",
-        "--gzip",
-        temp_out
-    ], stdout=open(output_file, 'w', encoding='utf-8'))
+    # Ghi thẳng file đầu ra, không gọi pyminifier nữa
+    with open(temp_out, 'r', encoding='utf-8') as f_in, open(output_file, 'w', encoding='utf-8') as f_out:
+        f_out.write(f_in.read())
 
     os.remove(temp_out)
 
@@ -206,11 +195,12 @@ exec(plaintext)
 """
     add_custom_comment(output_file, custom_header)
 
-    print(f"[✓] File đã được mã hóa, obfuscate và lưu tại: {output_file}")
+    print(f"[✓] File đã được mã hóa và lưu tại: {output_file}")
+
 
 # === Main ===
 def main():
-    print("=== AES-GCM Encryptor + Anti-Debug + RSA + Pyminifier ===")
+    print("=== AES-GCM Encryptor + Anti-Debug + RSA ===")
     create_rsa_keys()
 
     input_file = input("Nhập tên file đầu vào (vd: file.py): ").strip()
