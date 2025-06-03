@@ -77,8 +77,8 @@ from Crypto.Hash import SHA256, HMAC
 def manhs_debug():
     try:
         import sys
-        sys.settrace(lambda *a, **k: None)
-        if sys.gettrace():
+        sys.settrace(lambda *a, **k: None)  # Vô hiệu hóa debugger
+        if sys.gettrace():  # Nếu vẫn còn debugger đang active
             return True
     except:
         pass
@@ -99,16 +99,20 @@ def manhs_debug():
         pass
     return False
 
+
 def manhs_anti():
-    t1 = time.perf_counter()
-    time.sleep(0.05)
-    t2 = time.perf_counter()
-    return (t2 - t1) > 0.2
+    try:
+        t1 = time.perf_counter()
+        time.sleep(0.05)
+        t2 = time.perf_counter()
+        return (t2 - t1) > 0.3  # Tăng ngưỡng chống false positive
+    except:
+        return False
 
 def manhs_glitch():
     try:
         with open(__file__, 'w') as f:
-            f.write("#Code bị phá hủy do debug hoặc sửa mã!")
+            f.write("#Code bị phá hủy do debug hoặc chỉnh sửa mã!")
     except:
         pass
     sys.exit(1)
@@ -120,9 +124,10 @@ def check_integrity():
         expected_hash = "SHA256_HASH_PLACEHOLDER"
         actual_hash = hashlib.sha256(content).hexdigest()
         if actual_hash != expected_hash:
-            manhs_glitch()
+            return False
+        return True
     except:
-        manhs_glitch()
+        return False
 
 def xor_decrypt(b64_key, salt):
     enc = base64.b64decode(b64_key).decode('latin1')
@@ -130,18 +135,22 @@ def xor_decrypt(b64_key, salt):
     return bytes(ord(c) ^ salt[i % len(salt)] for i, c in enumerate(enc))
 
 def verify_sig(data, sig_b64):
-    with open("public.pem", "rb") as f:
-        pubkey = rsa.PublicKey.load_pkcs1(f.read())
     try:
+        with open("public.pem", "rb") as f:
+            pubkey = rsa.PublicKey.load_pkcs1(f.read())
         rsa.verify(data.encode(), base64.b64decode(sig_b64), pubkey)
         return True
     except:
         return False
 
-if manhs_debug() or manhs_anti():
-    manhs_glitch()
-
-check_integrity()
+# ===== BẮT ĐẦU KIỂM TRA =====
+if os.getenv("DEBUG_MODE") != "1":
+    if manhs_debug():
+        manhs_glitch()
+    if manhs_anti():
+        manhs_glitch()
+    if not check_integrity():
+        manhs_glitch()
 
 key = xor_decrypt("{encrypted_key_b64}", "{salt_b64}")
 salt = base64.b64decode("{salt_b64}")
@@ -170,32 +179,28 @@ if not verify_sig(plaintext, "{signature_b64}"):
 exec(plaintext)
 ''')
 
-    # 🛡️ Tính checksum SHA256 sau khi ghi file
-    with open(temp_out, 'rb') as f:
+    # Ghi file xong rồi mới obfuscate
+    subprocess.run([
+        "pyminifier",
+        "--obfuscate",
+        "--replacement-length=6",
+        temp_out
+    ], stdout=open(output_file, 'w', encoding='utf-8'))
+    os.remove(temp_out)
+
+    # SHA256 lại sau khi pyminifier
+    with open(output_file, 'rb') as f:
         content = f.read()
     sha256 = hashlib.sha256(content).hexdigest()
 
-    with open(temp_out, 'r+', encoding='utf-8') as f:
+    with open(output_file, 'r+', encoding='utf-8') as f:
         code = f.read()
         code = code.replace("SHA256_HASH_PLACEHOLDER", sha256)
         f.seek(0)
         f.write(code)
         f.truncate()
 
-    # Obfuscate
-    subprocess.run([
-        "pyminifier",
-        "--obfuscate",
-        "--replacement-length=6",
-        "--bzip2",
-        "--lzma",
-        "--gzip",
-        temp_out
-    ], stdout=open(output_file, 'w', encoding='utf-8'))
-
-    os.remove(temp_out)
-
-    # Ghi bản quyền
+    # Thêm comment bản quyền
     custom_header = """
 # Copyright By MinhAnhs
 # Đã mã hóa và bảo vệ quyền tác giả
