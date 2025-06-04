@@ -1,6 +1,6 @@
-import os, sys, time, random
+import os, sys, time, random, requests, socket
 
-# 7 màu ANSI cơ bản
+# Màu sắc
 colors = [
     "\033[38;5;196m",  # Đỏ
     "\033[38;5;202m",  # Cam
@@ -11,9 +11,9 @@ colors = [
     "\033[38;5;201m"   # Hồng tím
 ]
 reset = "\033[0m"
-
 error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")" + reset
 
+# Banner
 banner = [
     "╔═════════════════════════════════════════════╗",
     "║███╗   ███╗ █████╗ ███╗   ██╗██╗  ██╗███████╗║",
@@ -25,15 +25,13 @@ banner = [
     "╚═════════════════════════════════════════════╝"
 ]
 
-def typing_effect(text, delay=0.03):
-    for char in text:
-        sys.stdout.write(char)
-        sys.stdout.flush()
-        time.sleep(delay)
-    print()
+def manhs_ip(url):
+    response = requests.get(url)
+    # Lấy IP từ tên miền trong nội dung trả về
+    ip = socket.gethostbyname(response.text.strip())
+    return ip
 
-# Tạo dòng bị glitch + màu sắc nhấp nháy
-def glitch_line_color(line, glitch_rate=0.12):
+def glitch_line_color(line, glitch_rate=0.2):
     output = ""
     for char in line:
         if random.random() < glitch_rate and char not in [' ', '║', '╗', '╝', '╚', '╔', '═']:
@@ -44,20 +42,34 @@ def glitch_line_color(line, glitch_rate=0.12):
         output += color + glitch_char + reset
     return output
 
-# Xoá màn hình
-os.system('clear' if os.name != 'nt' else 'cls')
+def typing_effect(text, delay=0.03):
+    for char in text:
+        sys.stdout.write(char)
+        sys.stdout.flush()
+        time.sleep(delay)
+    print()
 
-# In thông báo khởi động
-typing_effect(f"{error} Tool đang bảo trì...\n")
-typing_effect("🌈 Đang khởi động hệ thống hiệu ứng màu động...\n")
-time.sleep(1)
+def main():
+    url = "http://kiemtraip.com/raw.php"
+    os.system('clear' if os.name != 'nt' else 'cls')
 
-# Vòng lặp hiệu ứng vô hạn
-try:
-    while True:
-        os.system('clear' if os.name != 'nt' else 'cls')
-        for line in banner:
-            print(glitch_line_color(line, glitch_rate=0.2))  # glitch nhanh hơn
-        time.sleep(0.05)  # giảm thời gian cho nhanh hơn
-except KeyboardInterrupt:
-    print("\n" + colors[0] + "[!] Đã thoát khỏi tool." + reset)
+    # Hiệu ứng gõ dòng khởi động
+    typing_effect(f"{error} Tool đang bảo trì...\n")
+    typing_effect("Đang khởi động hệ thống hiệu ứng màu động...\n")
+    time.sleep(1)
+
+    # Lấy IP 1 lần ban đầu
+    ip = manhs_ip(url)
+
+    try:
+        while True:
+            os.system('clear' if os.name != 'nt' else 'cls')
+            for line in banner:
+                print(glitch_line_color(line, glitch_rate=0.2))
+            print("\n" + colors[2] + f"-> IP hiện tại: {ip}" + reset)
+            time.sleep(0.05)
+    except KeyboardInterrupt:
+        print("\n" + colors[0] + "[!] Đã thoát khỏi tool." + reset)
+
+if __name__ == "__main__":
+    main()
