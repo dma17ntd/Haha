@@ -10,8 +10,7 @@ colors = [
     "\033[38;5;21m",   # Xanh dương
     "\033[38;5;201m"   # Hồng tím
 ]
-reset = "\033[0m"
-error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")" + reset
+error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")"
 
 # Banner
 banner = [
@@ -39,7 +38,7 @@ def glitch_line_color(line, glitch_rate=0.2):
         else:
             glitch_char = char
         color = random.choice(colors)
-        output += color + glitch_char + reset
+        output += color + glitch_char
     return output
 
 def typing_effect(text, delay=0.03):
@@ -65,8 +64,8 @@ def main():
         while True:
             os.system('clear' if os.name != 'nt' else 'cls')
             for line in banner:
-                print(glitch_line_color(line, glitch_rate=0.2))
-            print("\n" + colors[2] + f"-> IP hiện tại: {ip}" + reset)
+                print(glitch_line_color(line, glitch_rate=0.02))
+            print("\n" + colors[2] + f"-> IP hiện tại: {ip}")
             time.sleep(0.05)
     except KeyboardInterrupt:
         print("\n" + colors[0] + "[!] Đã thoát khỏi tool." + reset)
