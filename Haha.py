@@ -74,7 +74,7 @@ def main():
             os.system('clear' if os.name != 'nt' else 'cls')
 
             for line in banner:
-                print(glitch_line_color(line, glitch_rate=0.005))
+                print(glitch_line_color(line, glitch_rate=0.02))
             
             # In thêm thông tin bên dưới
             print()
