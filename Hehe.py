@@ -5,6 +5,8 @@ colors = [
     "\033[38;5;196m",  # Đỏ
     "\033[38;5;202m",  # Cam
     "\033[38;5;226m",  # Vàng
+    "\033[38;5;205m",  # Cam
+    "\033[38;5;199m",  # Hồng đậm
     "\033[38;5;46m",   # Xanh lá
     "\033[38;5;50m",   # Xanh light
     "\033[38;5;51m",   # Xanh cyan
@@ -69,7 +71,7 @@ def main():
             print("\n" + colors[2] + f"-> IP hiện tại: {ip}")
             time.sleep(0.05)
     except KeyboardInterrupt:
-        print("\n" + colors[0] + "[!] Đã thoát khỏi tool." + reset)
+        print("\n" + colors[0] + "[!] Đã thoát khỏi tool.")
 
 if __name__ == "__main__":
     main()
