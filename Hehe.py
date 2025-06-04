@@ -6,6 +6,7 @@ colors = [
     "\033[38;5;202m",  # Cam
     "\033[38;5;226m",  # Vàng
     "\033[38;5;46m",   # Xanh lá
+    "\033[38;5;50m",   # Xanh light
     "\033[38;5;51m",   # Xanh cyan
     "\033[38;5;21m",   # Xanh dương
     "\033[38;5;201m"   # Hồng tím
@@ -21,7 +22,7 @@ banner = [
     "║██║╚██╔╝██║██╔══██║██║╚██╗██║██╔══██║╚════██║║",
     "║██║ ╚═╝ ██║██║  ██║██║ ╚████║██║  ██║███████║║",
     "║╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝  ╚═╝╚══════╝║",
-    "╚═════════════════════════════════════════════╝"
+    "╚═════════════════════════════@MinhAnhs═══════╝"
 ]
 
 def manhs_ip(url):
@@ -54,7 +55,7 @@ def main():
 
     # Hiệu ứng gõ dòng khởi động
     typing_effect(f"{error} Tool đang bảo trì...\n")
-    typing_effect("Đang khởi động hệ thống hiệu ứng màu động...\n")
+    typing_effect("Đang bảo trì sẽ cập nhật sau vài giờ\n")
     time.sleep(1)
 
     # Lấy IP 1 lần ban đầu
