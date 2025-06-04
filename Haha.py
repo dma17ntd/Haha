@@ -5,11 +5,12 @@ import speedtest
 # Màu
 colors = [
     "\033[38;5;196m", "\033[38;5;202m", "\033[38;5;226m",
+    "\033[38;5;199m", "\033[38;5;154m", "\033[38;5;214m",
+    "\033[38;5;244m", "\033[38;5;155m", "\033[38;5;157m",
     "\033[38;5;46m", "\033[38;5;51m", "\033[38;5;21m",
-    "\033[38;5;201m"
+    "\033[38;5;201m", "\033[38;5;205m", "\033[38;5;50m",
 ]
-reset = "\033[0m"
-error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")" + reset
+error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")"
 
 banner = [
     "╔═════════════════════════════════════════════╗",
@@ -35,7 +36,7 @@ def glitch_line_color(line, glitch_rate=0.2):
         else:
             glitch_char = char
         color = random.choice(colors)
-        output += color + glitch_char + reset
+        output += color + glitch_char
     return output
 
 def typing_effect(text, delay=0.03):
@@ -61,7 +62,7 @@ def main():
     os.system('clear' if os.name != 'nt' else 'cls')
 
     typing_effect(f"{error} Tool đang bảo trì...\n")
-    typing_effect("🌈 Đang khởi động hệ thống hiệu ứng màu động...\n")
+    typing_effect("Đang bảo trì tool - Tool sẽ cập nhật sau ít phút\n")
     time.sleep(1)
 
     ip = manhs_ip(url)
@@ -73,17 +74,17 @@ def main():
             os.system('clear' if os.name != 'nt' else 'cls')
 
             for line in banner:
-                print(glitch_line_color(line, glitch_rate=0.2))
+                print(glitch_line_color(line, glitch_rate=0.02))
             
             # In thêm thông tin bên dưới
             print()
-            print(colors[2] + f"🕒 Thời gian hiện tại: {now}" + reset)
-            print(colors[4] + f"🌐 Địa chỉ IP: {ip}" + reset)
-            print(colors[5] + f"📶 Tốc độ mạng: {net_speed}" + reset)
+            print(colors[2] + f"Thời gian hiện tại: {now}")
+            print(colors[4] + f"Địa chỉ IP: {ip}")
+            print(colors[5] + f"Tốc độ mạng: {net_speed}")
 
             time.sleep(0.3)
     except KeyboardInterrupt:
-        print("\n" + colors[0] + "[!] Đã thoát khỏi tool." + reset)
+        print("\n" + colors[0] + "[!] Đã thoát khỏi tool.")
 
 if __name__ == "__main__":
     main()
