@@ -1,43 +1,44 @@
-import os, base64, rsa, sys, time, re
+import os, base64, rsa, sys, time, subprocess, re
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256, HMAC
-import hashlib
 
 # === RSA Key Generation ===
 def create_rsa_keys():
-    if not (os.path.exists("private.pem") and os.path.exists("public.pem")):
-        print("[*] Đang tạo khóa RSA...")
-        pubkey, privkey = rsa.newkeys(2048)
-        with open("private.pem", "wb") as f:
-            f.write(privkey.save_pkcs1('PEM'))
-        with open("public.pem", "wb") as f:
-            f.write(pubkey.save_pkcs1('PEM'))
-        print("[✓] Tạo khóa RSA thành công.")
-    else:
-        print("[!] Khóa RSA đã tồn tại.")
+    if not (os.path.exists("private.pem") and os.path.exists("public.pem")):
+        print("[*] Đang tạo khóa RSA...")
+        pubkey, privkey = rsa.newkeys(2048)
+        with open("private.pem", "wb") as f:
+            f.write(privkey.save_pkcs1('PEM'))
+        with open("public.pem", "wb") as f:
+            f.write(pubkey.save_pkcs1('PEM'))
+        print("[✓] Tạo khóa RSA thành công.")
+    else:
+        print("[!] Khóa RSA đã tồn tại.")
 
 # === PBKDF2 Key Derivation ===
 def derive_key(password: bytes, salt: bytes, key_len=32) -> bytes:
-    return PBKDF2(password, salt, dkLen=key_len, count=100_000, hmac_hash_module=SHA256)
+    return PBKDF2(password, salt, dkLen=key_len, count=100_000, hmac_hash_module=SHA256)
 
-# === Comment thêm bản quyền ===
+# === Comment thêm bản quyền sau khi obfuscate ===
 def add_custom_comment(filename, custom_header):
-    try:
-        with open(filename, "r", encoding="utf-8") as f:
-            content = f.read()
-        pattern = r"#\s*Created by pyminifier\s*\(https://github\.com/liftoff/pyminifier\)\n?"
-        content = re.sub(pattern, "", content)
-        content = custom_header.strip() + '\n' + content
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"[✓] Đã thêm comment bản quyền vào {filename}")
-    except Exception as e:
-        print(f"[!] Lỗi thêm comment: {e}")
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            content = f.read()
+        pattern = r"#\s*Created by pyminifier\s*\(https://github\.com/liftoff/pyminifier\)\n?"
+        content = re.sub(pattern, "", content)
+        content = custom_header.strip() + '\n' + content
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"[✓] Đã thêm comment bản quyền vào {filename}")
+    except Exception as e:
+        print(f"[!] Lỗi thêm comment: {e}")
 
 # === Encryption Process ===
 def encrypt_file(input_file, output_file):
+    import hashlib
+
     with open(input_file, 'r', encoding='utf-8') as f:
         plaintext = f.read()
 
@@ -60,57 +61,35 @@ def encrypt_file(input_file, output_file):
     hmac_calculated = HMAC.new(derived_key, hmac_data, digestmod=SHA256).digest()
     hmac_b64 = base64.b64encode(hmac_calculated).decode()
 
+    # Sign the plaintext
     with open("private.pem", "rb") as f:
         privkey = rsa.PrivateKey.load_pkcs1(f.read())
     signature = rsa.sign(plaintext.encode(), privkey, 'SHA-256')
     signature_b64 = base64.b64encode(signature).decode()
 
+    # Gộp public key vào mã hóa (ẩn qua XOR)
+    with open("public.pem", "rb") as f:
+        pubkey_pem = f.read()
+    pubkey_b64 = base64.b64encode(pubkey_pem).decode()
+    mask = get_random_bytes(1)[0]
+    obfuscated_pubkey = ''.join(chr(ord(c) ^ mask) for c in pubkey_b64)
+    pubkey_encoded = base64.b64encode(obfuscated_pubkey.encode()).decode()
+
     temp_out = f"__temp_{output_file}"
     with open(temp_out, 'w', encoding='utf-8') as f:
         f.write(f'''\
-import base64, rsa, sys, os, hashlib, time
+import base64, rsa, sys, os, hashlib
 from Crypto.Cipher import AES
 from Crypto.Protocol.KDF import PBKDF2
 from Crypto.Hash import SHA256, HMAC
 
-def manhs_debug():
-    try:
-        import sys
-        sys.settrace(lambda *a, **k: None)
-        if sys.gettrace():
-            return True
-    except:
-        pass
-    try:
-        import ctypes
-        if hasattr(ctypes, "windll") and ctypes.windll.kernel32.IsDebuggerPresent() != 0:
-            return True
-    except:
-        pass
-    try:
-        import psutil
-        sus = ['gdb', 'frida', 'ollydbg', 'x64dbg', 'ida', 'wireshark']
-        for proc in psutil.process_iter(['name']):
-            pname = (proc.info['name'] or '').lower()
-            if any(s in pname for s in sus):
-                return True
-    except:
-        pass
-    return False
+PUBKEY_MASKED_B64 = "{pubkey_encoded}"
+MASK = {mask}
 
-def manhs_anti():
-    t1 = time.perf_counter()
-    time.sleep(0.05)
-    t2 = time.perf_counter()
-    return (t2 - t1) > 0.2
-
-def manhs_glitch():
-    try:
-        with open(__file__, 'w') as f:
-            f.write("#Code bị phá hủy do debug hoặc sửa mã!")
-    except:
-        pass
-    sys.exit(1)
+def decode_pubkey():
+    obf = base64.b64decode(PUBKEY_MASKED_B64).decode()
+    decoded = ''.join(chr(ord(c) ^ MASK) for c in obf)
+    return rsa.PublicKey.load_pkcs1(base64.b64decode(decoded))
 
 def check_integrity():
     try:
@@ -119,10 +98,9 @@ def check_integrity():
         expected_hash = "SHA256_HASH_PLACEHOLDER"
         actual_hash = hashlib.sha256(content).hexdigest()
         if actual_hash != expected_hash:
-            return False
-        return True
+            print("[!] Cảnh báo: File đã bị thay đổi!")
     except:
-        return False
+        print("[!] Lỗi kiểm tra toàn vẹn.")
 
 def xor_decrypt(b64_key, salt):
     enc = base64.b64decode(b64_key).decode('latin1')
@@ -130,17 +108,14 @@ def xor_decrypt(b64_key, salt):
     return bytes(ord(c) ^ salt[i % len(salt)] for i, c in enumerate(enc))
 
 def verify_sig(data, sig_b64):
-    with open("public.pem", "rb") as f:
-        pubkey = rsa.PublicKey.load_pkcs1(f.read())
+    pubkey = decode_pubkey()
     try:
         rsa.verify(data.encode(), base64.b64decode(sig_b64), pubkey)
         return True
     except:
         return False
 
-# Chỉ gọi manhs_glitch khi có lỗi hoặc bị debug
-if manhs_debug() or manhs_anti() or not check_integrity():
-    manhs_glitch()
+check_integrity()
 
 key = xor_decrypt("{encrypted_key_b64}", "{salt_b64}")
 salt = base64.b64decode("{salt_b64}")
@@ -155,21 +130,24 @@ hmac_data = salt + nonce + tag + ciphertext
 try:
     HMAC.new(derived_key, hmac_data, digestmod=SHA256).verify(hmac_received)
 except:
-    manhs_glitch()
+    print("[!] Lỗi xác thực HMAC.")
+    sys.exit(1)
 
 cipher = AES.new(derived_key, AES.MODE_GCM, nonce=nonce)
 try:
     plaintext = cipher.decrypt_and_verify(ciphertext, tag).decode()
 except:
-    manhs_glitch()
+    print("[!] Lỗi giải mã AES.")
+    sys.exit(1)
 
 if not verify_sig(plaintext, "{signature_b64}"):
-    manhs_glitch()
+    print("[!] Chữ ký không hợp lệ.")
+    sys.exit(1)
 
 exec(plaintext)
 ''')
 
-    # Tính checksum SHA256 sau khi ghi file
+    # Tính SHA256 và cập nhật vào file
     with open(temp_out, 'rb') as f:
         content = f.read()
     sha256 = hashlib.sha256(content).hexdigest()
@@ -181,13 +159,17 @@ exec(plaintext)
         f.write(code)
         f.truncate()
 
-    # Ghi thẳng file đầu ra, không gọi pyminifier nữa
-    with open(temp_out, 'r', encoding='utf-8') as f_in, open(output_file, 'w', encoding='utf-8') as f_out:
-        f_out.write(f_in.read())
+    # Obfuscate
+    subprocess.run([
+        "pyminifier",
+        "--obfuscate",
+        "--replacement-length=6",
+        temp_out
+    ], stdout=open(output_file, 'w', encoding='utf-8'))
 
     os.remove(temp_out)
 
-    # Ghi bản quyền
+    # Ghi comment bản quyền
     custom_header = """
 # Copyright By MinhAnhs
 # Đã mã hóa và bảo vệ quyền tác giả
@@ -195,22 +177,21 @@ exec(plaintext)
 """
     add_custom_comment(output_file, custom_header)
 
-    print(f"[✓] File đã được mã hóa và lưu tại: {output_file}")
-
+    print(f"[✓] File đã được mã hóa, obfuscate và lưu tại: {output_file}")
 
 # === Main ===
 def main():
-    print("=== AES-GCM Encryptor + Anti-Debug + RSA ===")
-    create_rsa_keys()
+    print("=== AES-GCM Encryptor + Anti-Debug + RSA + Pyminifier ===")
+    create_rsa_keys()
 
-    input_file = input("Nhập tên file đầu vào (vd: file.py): ").strip()
-    output_file = input("Nhập tên file đầu ra (vd: file_out.py): ").strip()
+    input_file = input("Nhập tên file đầu vào (vd: file.py): ").strip()
+    output_file = input("Nhập tên file đầu ra (vd: file_out.py): ").strip()
 
-    if not os.path.exists(input_file):
-        print("[!] File không tồn tại.")
-        return
+    if not os.path.exists(input_file):
+        print("[!] File không tồn tại.")
+        return
 
-    encrypt_file(input_file, output_file)
+    encrypt_file(input_file, output_file)
 
 if __name__ == "__main__":
-    main()
+    main()
