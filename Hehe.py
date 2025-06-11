@@ -13,7 +13,7 @@ colors = [
     "\033[38;5;21m",   # Xanh dương
     "\033[38;5;201m"   # Hồng tím
 ]
-error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")"
+error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")" + colors[3]
 
 # Banner
 banner = [
@@ -68,7 +68,7 @@ def main():
             os.system('clear' if os.name != 'nt' else 'cls')
             for line in banner:
                 print(glitch_line_color(line, glitch_rate=0.02))
-            print("\n" + colors[2] + f"-> IP hiện tại: {ip}")
+            print("\n" + colors[6] + f"-> IP hiện tại: {ip}")
             time.sleep(0.05)
     except KeyboardInterrupt:
         print("\n" + colors[0] + "[!] Đã thoát khỏi tool.")
