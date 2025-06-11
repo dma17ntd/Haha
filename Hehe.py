@@ -13,7 +13,7 @@ colors = [
     "\033[38;5;21m",   # Xanh dương
     "\033[38;5;201m"   # Hồng tím
 ]
-error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")" + colors[3]
+error = colors[0] + "(" + colors[2] + "!" + colors[0] + ")" + colors[5]
 
 # Banner
 banner = [
@@ -37,7 +37,7 @@ def glitch_line_color(line, glitch_rate=0.2):
     output = ""
     for char in line:
         if random.random() < glitch_rate and char not in [' ', '║', '╗', '╝', '╚', '╔', '═']:
-            glitch_char = random.choice("!@#$%^&*()_+=~<>?")
+            glitch_char = random.choice("🇻🇳!@#$%₫&*€¥=~<>?")
         else:
             glitch_char = char
         color = random.choice(colors)
