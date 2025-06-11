@@ -69,6 +69,7 @@ def main():
             for line in banner:
                 print(glitch_line_color(line, glitch_rate=0.02))
             print("\n" + colors[6] + f"-> IP hiện tại: {ip}")
+            print(colors[7] + "Tool đang bảo trì rồi hẹn vài phút sau")
             time.sleep(0.05)
     except KeyboardInterrupt:
         print("\n" + colors[0] + "[!] Đã thoát khỏi tool.")
